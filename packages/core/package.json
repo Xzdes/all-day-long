@@ -1,0 +1,9 @@
+{
+  "name": "all-day-long-core",
+  "version": "1.0.0",
+  "description": "A bulletproof, zero-config core for native React applications on Electron.",
+  "main": "main.js",
+  "dependencies": {
+    "electron": "37.2.6"
+  }
+}

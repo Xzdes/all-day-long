@@ -1,0 +1,19 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx",
+    "start": "electron ../core/main.js",
+    "dev": "npm run build && npm run start"
+  },
+  "dependencies": {
+    "all-day-long-core": "file:../core",
+    "react": "19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8"
+  }
+}

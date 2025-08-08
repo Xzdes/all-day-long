@@ -1,0 +1,17 @@
+{
+  "name": "all-day-long-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A new project powered by the all-day-long core.",
+  "scripts": {
+    "install-all": "npm install",
+    "dev": "npm run dev --workspace=app",
+    "start": "npm start --workspace=app"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "electron": "37.2.6"
+  }
+}
