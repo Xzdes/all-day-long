@@ -1,27 +1,30 @@
 // packages/app/src/components/SideMenu.jsx
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import styles from './SideMenu.module.css'; // Этот путь теперь верный!
 
 export default function SideMenu({ isCollapsed, onToggle }) {
+  const asideClasses = `${styles.sideMenu} ${isCollapsed ? styles.collapsed : ''}`;
+
   return (
-    <aside className={`side-menu ${isCollapsed ? 'collapsed' : ''}`}>
-      <div className="menu-toggle">
-        <button onClick={onToggle} title="Toggle menu">
+    <aside className={asideClasses}>
+      <div className={styles.menuToggle}>
+        <button onClick={onToggle} title="Toggle menu" className={styles.toggleButton}>
           {isCollapsed ? '>>' : '<<'}
         </button>
       </div>
       <nav>
-        <ul>
+        <ul className={styles.nav}>
           <li>
-            <NavLink to="/">
+            <NavLink to="/" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
               <span>🏠</span>
-              <span className="menu-item-text">Главная</span>
+              <span className={styles.menuItemText}>Главная</span>
             </NavLink>
           </li>
           <li>
-            <NavLink to="/settings">
+            <NavLink to="/settings" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
               <span>⚙️</span>
-              <span className="menu-item-text">Настройки</span>
+              <span className={styles.menuItemText}>Настройки</span>
             </NavLink>
           </li>
         </ul>

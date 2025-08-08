@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "A bulletproof, zero-config core for native React applications on Electron.",
   "main": "main.js",
+  "bin": {
+    "create-longday-app": "./cli/create-app.js"
+  },
   "dependencies": {
     "electron": "37.2.6"
   }

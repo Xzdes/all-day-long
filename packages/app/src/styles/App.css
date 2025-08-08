@@ -7,6 +7,7 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color 0.2s, color 0.2s;
+  overflow: hidden; /* Запрещаем скролл на уровне всего окна */
 }
 
 /* --- Переменные для тем --- */
@@ -16,6 +17,7 @@ body {
   --text-primary: #111827;
   --text-secondary: #6B7280;
   --accent-primary: #3B82F6;
+  --accent-hover: #60A5FA;
   --border-color: #E5E7EB;
 }
 
@@ -25,86 +27,11 @@ body {
   --text-primary: #F9FAFB;
   --text-secondary: #9CA3AF;
   --accent-primary: #60A5FA;
+  --accent-hover: #1F2937;
   --border-color: #374151;
 }
 
-/* --- Стили лейаута --- */
-.app-layout {
-  display: flex;
-  height: 100vh;
-}
-
-.side-menu {
-  width: 240px;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  padding: 1.5rem 0;
-  transition: width 0.3s ease;
-  overflow: hidden; /* Важно для скрытия текста при сворачивании */
-  flex-shrink: 0;
-}
-
-.side-menu.collapsed {
-  width: 70px; /* Ширина в свернутом состоянии */
-}
-
-.side-menu .menu-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 1.5rem;
-  margin-bottom: 2rem;
-}
-.side-menu.collapsed .menu-toggle {
-  justify-content: center;
-  padding: 0;
-}
-
-.side-menu button {
-  background: none;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  padding: 0.5rem;
-  line-height: 0;
-}
-.side-menu button:hover {
-  background: var(--bg-primary);
-}
-
-.side-menu nav ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.side-menu nav a {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1.5rem;
-  text-decoration: none;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.side-menu nav a.active {
-  background-color: var(--accent-primary);
-  color: white;
-}
-
-.side-menu.collapsed .menu-item-text {
-  display: none;
-}
-
-.main-content {
-  flex-grow: 1;
-  padding: 2rem;
-  overflow-y: auto;
-}
-
-/* Создаем общий, переиспользуемый класс для кнопок */
+/* --- Общий класс для кнопок --- */
 .btn {
   background-color: var(--accent-primary);
   color: white;
@@ -114,11 +41,9 @@ body {
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .btn:hover {
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  outline: 1px solid var(--border-color);
+  background-color: var(--accent-hover);
 }

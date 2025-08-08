@@ -1,55 +1,64 @@
 // packages/app/src/context/ThemeContext.jsx
 import React, { createContext, useState, useEffect, useContext } from 'react';
+// Импортируем оба API
+import { settings, app } from '../api';
 
-export const ThemeContext = createContext();
+export const AppContext = createContext(); // Переименовываем в более общий AppContext
 
-export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState('light');
+export function AppProvider({ children }) { // И AppProvider
+  const [theme, setThemeState] = useState('light');
+  const [appTitle, setAppTitle] = useState('Loading...'); // Состояние для заголовка
   const [isLoading, setIsLoading] = useState(true);
 
-  // При первом запуске запрашиваем сохраненную тему с сервера
   useEffect(() => {
-    async function fetchInitialTheme() {
+    async function fetchInitialData() {
       try {
-        const settings = await window.longday.call('settings.getSettings');
-        if (settings && settings.theme) {
-          setTheme(settings.theme);
+        // Запрашиваем и настройки, и публичный конфиг параллельно
+        const [currentSettings, publicConfig] = await Promise.all([
+          settings.getSettings(),
+          app.getPublicConfig(),
+        ]);
+        
+        if (currentSettings && currentSettings.theme) {
+          setThemeState(currentSettings.theme);
+        }
+        if (publicConfig && publicConfig.window && publicConfig.window.title) {
+          setAppTitle(publicConfig.window.title);
         }
       } catch (error) {
-        console.error("Failed to fetch initial theme:", error);
+        console.error("Failed to fetch initial data:", error);
+        setAppTitle("Error"); // Показываем ошибку в заголовке
       } finally {
         setIsLoading(false);
       }
     }
-    fetchInitialTheme();
+    fetchInitialData();
   }, []);
 
-  // При смене темы, обновляем атрибут на <html> и отправляем на сервер
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   const toggleTheme = async () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
+    setThemeState(newTheme);
     try {
-      await window.longday.call('settings.setTheme', newTheme);
+      await settings.setTheme(newTheme);
     } catch (error) {
-      console.error("Failed to save theme:", error);
-      // Можно реализовать логику отката темы в случае ошибки
+      console.error("Failed to save theme, reverting UI.", error);
+      setThemeState(theme);
     }
   };
 
+  const value = { theme, toggleTheme, appTitle };
+
   if (isLoading) {
-    return <div>Loading theme...</div>; // Или спиннер
+    return React.createElement('div', null, 'Loading App...');
   }
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return React.createElement(AppContext.Provider, { value }, children);
 }
 
-// Удобный хук для использования контекста
-export const useTheme = () => useContext(ThemeContext);
+// Создаем два удобных хука для доступа к разным частям контекста
+export const useTheme = () => useContext(AppContext);
+export const useAppConfig = () => useContext(AppContext);
