@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// packages/core/cli/create-app.js
 const fs = require('fs');
 const path = require('path');
 
@@ -18,28 +17,34 @@ if (fs.existsSync(projectDir)) {
   process.exit(1);
 }
 
-// Путь к нашему шаблону. Он должен лежать внутри ядра.
 const templateDir = path.join(__dirname, '..', 'template');
 
 console.log(`Создание нового проекта "${projectName}" в директории ${projectDir}...`);
 
 try {
-  // 1. Копируем всю структуру шаблона
   fs.mkdirSync(projectDir, { recursive: true });
   fs.cpSync(templateDir, projectDir, { recursive: true });
 
-  // 2. Персонализируем package.json самого приложения
+  // Персонализируем package.json приложения
   const appPackageJsonPath = path.join(projectDir, 'packages', 'app', 'package.json');
   let appPackageJson = JSON.parse(fs.readFileSync(appPackageJsonPath, 'utf8'));
   appPackageJson.name = projectName;
-  appPackageJson.description = `The application part of the ${projectName} project.`;
+  appPackageJson.description = `The application for the ${projectName} project.`;
+  appPackageJson.build.productName = projectName; // Обновляем имя для сборки
+  appPackageJson.build.appId = `com.example.${projectName}`; // Обновляем ID
   fs.writeFileSync(appPackageJsonPath, JSON.stringify(appPackageJson, null, 2));
 
-  // 3. Персонализируем корневой package.json монорепозитория
+  // Персонализируем корневой package.json
   const rootPackageJsonPath = path.join(projectDir, 'package.json');
   let rootPackageJson = JSON.parse(fs.readFileSync(rootPackageJsonPath, 'utf8'));
   rootPackageJson.name = `${projectName}-monorepo`;
   fs.writeFileSync(rootPackageJsonPath, JSON.stringify(rootPackageJson, null, 2));
+  
+  // Персонализируем longday.config.js
+  const configPath = path.join(projectDir, 'packages', 'app', 'longday.config.js');
+  let configFile = fs.readFileSync(configPath, 'utf8');
+  configFile = configFile.replace(/My New App/g, projectName);
+  fs.writeFileSync(configPath, configFile);
 
   console.log('\n✅ Проект успешно создан!');
   console.log('\nТеперь выполните следующие команды:');
@@ -50,7 +55,6 @@ try {
 } catch (error) {
   console.error('\n❌ Произошла ошибка во время создания проекта:');
   console.error(error);
-  // Попытка очистить за собой в случае ошибки
   if (fs.existsSync(projectDir)) {
     fs.rmSync(projectDir, { recursive: true, force: true });
   }

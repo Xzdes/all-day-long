@@ -1,114 +1,40 @@
-// packages/core/main.js
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-// --- ШАГ 1: ЗАГРУЗКА КОНФИГУРАЦИИ ПРИЛОЖЕНИЯ ---
+// Мы не определяем глобальные переменные здесь.
+// Вся инициализация будет инкапсулирована в функции `initialize`.
 
-const APP_ROOT = process.cwd();
-
-let config = {
-  app: {
-    appId: 'com.electron.alldaylongapp',
-    productName: 'All Day Long App',
-  },
-  window: {
-    width: 800,
-    height: 600,
-    title: 'All Day Long App',
-    frame: true,
-    titleBarStyle: 'default',
-    devtools: false,
-  },
-  apiPath: path.join(APP_ROOT, 'server', 'api'),
-  publicPath: path.join(APP_ROOT, 'public'),
-};
-
-try {
-  const userConfigPath = path.join(APP_ROOT, 'longday.config.js');
-  if (fs.existsSync(userConfigPath)) {
-    const userConfig = require(userConfigPath);
-    config = {
-      ...config,
-      ...userConfig,
-      app: { ...config.app, ...userConfig.app },
-      window: { ...config.window, ...userConfig.window }
-    };
-    console.log('[Core] Loaded app configuration from longday.config.js');
-  } else {
-    console.warn('[Core] longday.config.js not found. Using default settings.');
-  }
-} catch (e) {
-  console.error('[Core] Error loading longday.config.js:', e);
-}
-
-if (config.app.appId) {
-  app.setAppUserModelId(config.app.appId);
-}
-if (config.app.productName) {
-    app.setName(config.app.productName);
-}
-
-
-// --- ШАГ 2: РЕГИСТРАЦИЯ СЕРВЕРНЫХ API ---
-
-const api = new Map();
-try {
-  if (fs.existsSync(config.apiPath)) {
-    const apiFiles = fs.readdirSync(config.apiPath).filter(f => f.endsWith('.js'));
-    for (const file of apiFiles) {
-      const moduleName = path.basename(file, '.js');
-      const apiModule = require(path.join(config.apiPath, file));
-      for (const functionName in apiModule) {
-        if (typeof apiModule[functionName] === 'function') {
-          api.set(`${moduleName}.${functionName}`, apiModule[functionName]);
-        }
-      }
-    }
-    console.log(`[Core] Successfully registered ${api.size} API functions.`);
-  } else {
-    console.warn(`[Core] API directory not found at ${config.apiPath}. No APIs were registered.`);
-  }
-} catch (e) {
-  console.error(`[Core] Failed to register APIs from ${config.apiPath}:`, e.message);
-}
-
-// --- УЛУЧШЕННЫЙ ОБРАБОТЧИК API С ПЕРЕХВАТОМ КОМАНД ОКНА ---
+// Универсальный обработчик API остается в глобальной области видимости,
+// так как `ipcMain` является синглтоном.
 ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
-  // `event.sender` - это webContents, который отправил вызов.
-  // Из него мы можем получить окно (BrowserWindow), к которому он принадлежит.
+  // Мы получаем доступ к `apiRegistry` через замыкание, после его инициализации.
+  // Это безопасно, так как `handle` вызывается только после того, как приложение уже работает.
+  const func = apiRegistry.get(apiKey);
   const win = BrowserWindow.fromWebContents(event.sender);
 
-  // --- ПЕРЕХВАТ СПЕЦИАЛЬНЫХ КОМАНД ЯДРА ---
-  // Если вызов начинается с "window.", мы обрабатываем его здесь и не ищем в API приложения.
+  // Перехват специальных команд ядра для управления окном
   if (apiKey.startsWith('window.')) {
-    const method = apiKey.split('.')[1]; // Берем имя метода, например, "minimize"
+    const method = apiKey.split('.')[1];
     switch (method) {
       case 'minimize':
         if (win) win.minimize();
-        return; // Завершаем выполнение
+        return;
       case 'toggleMaximize':
         if (win) {
-          if (win.isMaximized()) {
-            win.unmaximize();
-          } else {
-            win.maximize();
-          }
+            win.isMaximized() ? win.unmaximize() : win.maximize();
         }
-        return; // Завершаем выполнение
+        return;
       case 'close':
         if (win) win.close();
-        return; // Завершаем выполнение
+        return;
       default:
-        // Если метод неизвестен, выбрасываем ошибку.
         throw new Error(`Unknown window API method: ${method}`);
     }
   }
 
-  // --- ОБЫЧНАЯ ОБРАБОТКА API ПРИЛОЖЕНИЯ ---
-  // Этот код выполнится, только если apiKey не начинается с "window."
-  const func = api.get(apiKey);
+  // Обычная обработка API приложения
   if (!func) {
     throw new Error(`API function "${apiKey}" is not registered.`);
   }
@@ -120,12 +46,83 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
   }
 });
 
+// Глобальные переменные, которые будут инициализированы, когда приложение будет готово.
+// Они доступны только внутри этого модуля.
+let config;
+const apiRegistry = new Map();
 
-// --- ШАГ 3: ЗАПУСК ЛОКАЛЬНОГО СЕРВЕРА ---
+/**
+ * Главная асинхронная функция инициализации.
+ * Запускается один раз, когда Electron готов к работе.
+ */
+async function initialize() {
+  // ★★★ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ★★★
+  // app.getAppPath() - это ЕДИНСТВЕННЫЙ надежный способ получить путь к корню приложения.
+  // В разработке он указывает на packages/app.
+  // В собранном виде он указывает на resources/app.asar.
+  const APP_ROOT = app.getAppPath();
 
+  // --- ШАГ 1: ЗАГРУЗКА КОНФИГУРАЦИИ ---
+  config = {
+    app: { appId: 'com.electron.default', productName: 'Default App' },
+    window: { width: 900, height: 680, title: 'Default Title' },
+    apiPath: path.join(APP_ROOT, 'server', 'api'),
+    publicPath: path.join(APP_ROOT, 'public'),
+  };
+  try {
+    const userConfigPath = path.join(APP_ROOT, 'longday.config.js');
+    if (fs.existsSync(userConfigPath)) {
+        const userConfig = require(userConfigPath);
+        config = {
+            ...config,
+            ...userConfig,
+            app: { ...config.app, ...userConfig.app },
+            window: { ...config.window, ...userConfig.window }
+        };
+        console.log('[Core] Loaded app configuration.');
+    } else {
+        console.warn('[Core] longday.config.js not found. Using default settings.');
+    }
+  } catch (e) {
+    console.error('[Core] Error loading longday.config.js:', e);
+  }
+
+  // --- ШАГ 2: РЕГИСТРАЦИЯ API ---
+  try {
+    if (fs.existsSync(config.apiPath)) {
+        const apiFiles = fs.readdirSync(config.apiPath).filter(f => f.endsWith('.js'));
+        for (const file of apiFiles) {
+          const moduleName = path.basename(file, '.js');
+          const apiModule = require(path.join(config.apiPath, file));
+          for (const funcName in apiModule) {
+            if (typeof apiModule[funcName] === 'function') {
+                apiRegistry.set(`${moduleName}.${funcName}`, apiModule[funcName]);
+            }
+          }
+        }
+        console.log(`[Core] Successfully registered ${apiRegistry.size} API functions.`);
+    } else {
+        console.warn(`[Core] API directory not found at ${config.apiPath}.`);
+    }
+  } catch(e) {
+    console.error('[Core] Failed to register APIs:', e);
+  }
+
+  // --- ШАГ 3: ЗАПУСК ЛОКАЛЬНОГО СЕРВЕРА ---
+  const serverUrl = await startLocalServer();
+
+  // --- ШАГ 4: СОЗДАНИЕ ОКНА ---
+  await createWindow(serverUrl);
+}
+
+/**
+ * Запускает локальный HTTP-сервер для отдачи React-приложения.
+ * @returns {Promise<string>} URL запущенного сервера.
+ */
 function startLocalServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
+      // Путь к файлам теперь строится от правильного `config.publicPath`, который основан на `APP_ROOT`.
       const filePath = path.join(config.publicPath, req.url === '/' ? 'index.html' : req.url);
       fs.readFile(filePath, (err, data) => {
         if (err) {
@@ -139,38 +136,49 @@ function startLocalServer() {
     });
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address();
-      const serverUrl = `http://127.0.0.1:${port}`;
-      console.log(`[Core] React app server running at: ${serverUrl}`);
-      resolve(serverUrl);
+      const url = `http://127.0.0.1:${port}`;
+      console.log(`[Core] Local server running at: ${url}`);
+      resolve(url);
     });
     server.on('error', (err) => reject(err));
   });
 }
 
-
-// --- ШАГ 4: СОЗДАНИЕ ОКНА ELECTRON ---
-
-async function createWindow() {
-  try {
-    const serverUrl = await startLocalServer();
-    const win = new BrowserWindow({
-      ...config.window,
-      icon: config.window.icon,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        csp: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-      }
-    });
-    win.loadURL(serverUrl);
-    if (config.window.devtools) {
-        win.webContents.openDevTools();
+/**
+ * Создает и настраивает главное окно приложения.
+ * @param {string} serverUrl - URL для загрузки в окно.
+ */
+function createWindow(serverUrl) {
+  const win = new BrowserWindow({
+    ...config.window,
+    icon: config.window.icon,
+    webPreferences: {
+      // `preload` всегда лежит рядом с `main.js` в папке ядра.
+      preload: path.join(__dirname, 'preload.js'),
+      csp: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     }
-  } catch (error) {
-    console.error('[Core] CRITICAL: Failed to create window or start server.', error);
-    app.quit();
+  });
+
+  win.loadURL(serverUrl);
+
+  if (config.window.devtools) {
+      win.webContents.openDevTools();
   }
 }
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => process.platform !== 'darwin' && app.quit());
-app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
+// Запускаем всю нашу инициализацию только тогда, когда приложение готово.
+app.whenReady().then(initialize);
+
+// Стандартная обработка жизненного цикла приложения.
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+app.on('activate', () => {
+    // На macOS принято заново создавать окно, если оно было закрыто, а приложение осталось в доке.
+    if (BrowserWindow.getAllWindows().length === 0) {
+        initialize();
+    }
+});

@@ -1,12 +1,39 @@
 {
   "name": "all-day-long-core",
   "version": "1.0.0",
-  "description": "A bulletproof, zero-config core for native React applications on Electron.",
+  "description": "A bulletproof, zero-config core for creating native desktop apps with Electron and React.",
   "main": "main.js",
   "bin": {
-    "create-longday-app": "./cli/create-app.js"
+    "create-longday-app": "cli/create-app.js"
   },
+  "files": [
+    "main.js",
+    "preload.js",
+    "cli/",
+    "template/"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xzdes/all-day-long.git"
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "desktop",
+    "framework",
+    "core",
+    "boilerplate"
+  ],
+  "author": "Xzdes",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Xzdes/all-day-long/issues"
+  },
+  "homepage": "https://github.com/Xzdes/all-day-long#readme",
   "dependencies": {
-    "electron": "37.2.6"
+   "electron": "37.2.6"
   }
 }
