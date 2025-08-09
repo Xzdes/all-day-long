@@ -16,9 +16,11 @@ export default function SideMenu({ isCollapsed, onToggle }) {
       <nav>
         <ul className={styles.nav}>
           <li>
+            {/* ★★★ НАШЕ ИСПРАВЛЕНИЕ ★★★ */}
+            {/* Ссылка '/' теперь ведет на страницу с информацией о системе */}
             <NavLink to="/" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
-              <span>🏠</span>
-              <span className={styles.menuItemText}>Главная</span>
+              <span>💻</span>
+              <span className={styles.menuItemText}>Система</span>
             </NavLink>
           </li>
           <li>

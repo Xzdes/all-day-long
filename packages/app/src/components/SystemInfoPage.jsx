@@ -1,78 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { system, core } from '../api';
+import React, { useState, useEffect } from 'react';
+import { system } from '../api';
+// ★★★ НАША РЕАЛИЗАЦИЯ (ЦЕНТРАЛИЗОВАННЫЙ СЕРВИС) ★★★
+// Импортируем наш новый менеджер вместо прямого вызова `core`
+import { workerManager } from '../services/WorkerManager';
+
+// Константа для пути к скрипту для удобства
+const HEAVY_TASK_SCRIPT = 'server/workers/heavy-task.js';
 
 export default function SystemInfoPage() {
+  // --- Системная информация и приветствие (без изменений) ---
   const [systemInfo, setSystemInfo] = useState(null);
   const [name, setName] = useState('Мир');
   const [greeting, setGreeting] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const [workerId, setWorkerId] = useState(null);
-  const [workerStatus, setWorkerStatus] = useState('Not running');
-  const [workerProgress, setWorkerProgress] = useState(0);
-
-  // ★★★ ИСПРАВЛЕНИЕ №2 (часть 2) ★★★
-  // Обработчик сообщений от воркера теперь ждет сообщения 'ready'
-  const handleWorkerMessage = useCallback((id, data) => {
-    if (id !== workerId) return;
-
-    // ШАГ 2: Воркер готов, отправляем ему команду на старт
-    if (data.type === 'ready') {
-      setWorkerStatus('Worker is ready. Sending task...');
-      core.postMessageToWorker(id, { command: 'start', iterations: 500_000_000 });
-      return;
-    }
-    
-    // Обработка обычных сообщений о прогрессе и статусе
-    if (data.type === 'progress') {
-      setWorkerProgress(data.value);
-    } else {
-      setWorkerStatus(data.value);
-    }
-  }, [workerId]);
-
-  const handleWorkerExit = useCallback((id, code) => {
-    if (id !== workerId) return;
-    setWorkerStatus(`Worker exited with code ${code}. Ready to start a new one.`);
-    setWorkerId(null);
-    setWorkerProgress(0);
-  }, [workerId]);
-
-  useEffect(() => {
-    const cleanupMessage = core.onWorkerMessage(handleWorkerMessage);
-    const cleanupExit = core.onWorkerExit(handleWorkerExit);
-    
-    return () => {
-      cleanupMessage();
-      cleanupExit();
-    };
-  }, [handleWorkerMessage, handleWorkerExit]);
-  
-  // ★★★ ИСПРАВЛЕНИЕ №2 (часть 3) ★★★
-  // Функция запуска теперь только создает воркер и ждет
-  const handleStartWorker = async () => {
-    if (workerId) return;
-    try {
-      // ШАГ 1: Просто запускаем воркер
-      setWorkerStatus('Starting worker...');
-      const { workerId: newWorkerId } = await core.createWorker('server/workers/heavy-task.js');
-      setWorkerId(newWorkerId);
-      setWorkerStatus('Worker started, waiting for ready signal...');
-    } catch (e) {
-      setWorkerStatus(`Error: ${e.message}`);
-    }
-  };
-
-  // Остальная часть файла без изменений
-  const handleStopWorker = async () => {
-    if (!workerId) return;
-    try {
-      await core.terminateWorker(workerId);
-    } catch (e) {
-      setWorkerStatus(`Error: ${e.message}`);
-    }
-  };
   
   useEffect(() => {
     async function fetchInfo() {
@@ -103,6 +44,68 @@ export default function SystemInfoPage() {
       setIsLoading(false);
     }
   };
+  
+  // --- Логика воркера, теперь управляемая через WorkerManager ---
+
+  // Локальное состояние компонента, которое будет синхронизироваться с менеджером
+  const [workerState, setWorkerState] = useState({
+    id: null,
+    status: 'Not running',
+    progress: 0,
+    isRunning: false,
+  });
+
+  // Подписываемся на изменения в WorkerManager при монтировании компонента
+  useEffect(() => {
+    const handleStateUpdate = (allWorkers) => {
+      // В этом компоненте нас интересует только наш конкретный воркер
+      let relevantState = null;
+      for (const worker of allWorkers.values()) {
+        if (worker.scriptPath === HEAVY_TASK_SCRIPT) {
+          relevantState = worker;
+          break; // Нашли, выходим
+        }
+      }
+
+      if (relevantState) {
+        setWorkerState({
+          id: relevantState.id,
+          status: relevantState.status,
+          progress: relevantState.progress,
+          isRunning: relevantState.isRunning,
+        });
+      } else {
+        // Если воркера нет, сбрасываем состояние в начальное
+        setWorkerState({
+          id: null,
+          status: 'Ready to start a new one.',
+          progress: 0,
+          isRunning: false,
+        });
+      }
+    };
+
+    // workerManager.subscribe возвращает функцию отписки
+    const unsubscribe = workerManager.subscribe(handleStateUpdate);
+
+    // Отписываемся при размонтировании компонента
+    return () => unsubscribe();
+  }, []); // Пустой массив зависимостей, чтобы подписка была одна на весь жизненный цикл
+
+  const handleStartWorker = () => {
+    if (workerState.isRunning) return;
+    // Компонент просто просит менеджер запустить задачу
+    workerManager.startTask(
+      HEAVY_TASK_SCRIPT,
+      { command: 'start', iterations: 500_000_000 }
+    );
+  };
+
+  const handleStopWorker = () => {
+    if (!workerState.id) return;
+    // Компонент просто просит менеджер остановить задачу
+    workerManager.stopTask(workerState.id);
+  };
 
   return (
     <div>
@@ -127,21 +130,21 @@ export default function SystemInfoPage() {
       {error && <p style={{ color: 'red', marginTop: '1em', fontSize: '1.2rem' }}>Ошибка: {error}</p>}
       <hr style={{ margin: '2rem 0' }} />
       <h2>Тест Фонового Воркера</h2>
-      <p>Эта кнопка запускает тяжелую задачу в отдельном процессе, не блокируя UI.</p>
+      <p>Эта кнопка запускает тяжелую задачу в отдельном процессе, не блокируя UI. Логика управляется централизованным сервисом.</p>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
-        <button className="btn" onClick={handleStartWorker} disabled={!!workerId}>
+        <button className="btn" onClick={handleStartWorker} disabled={workerState.isRunning}>
           🚀 Запустить тяжелую задачу
         </button>
-        <button className="btn" onClick={handleStopWorker} disabled={!workerId}>
+        <button className="btn" onClick={handleStopWorker} disabled={!workerState.isRunning}>
           🛑 Остановить
         </button>
       </div>
       <div>
-        <p><strong>Статус:</strong> {workerStatus}</p>
-        {workerId && (
+        <p><strong>Статус:</strong> {workerState.status}</p>
+        {workerState.isRunning && (
            <div style={{ width: '100%', backgroundColor: '#e0e0e0', borderRadius: '4px' }}>
-             <div style={{ width: `${workerProgress}%`, backgroundColor: '#3B82F6', color: 'white', textAlign: 'center', padding: '4px', borderRadius: '4px', transition: 'width 0.2s ease' }}>
-               {workerProgress}%
+             <div style={{ width: `${workerState.progress}%`, backgroundColor: '#3B82F6', color: 'white', textAlign: 'center', padding: '4px', borderRadius: '4px', transition: 'width 0.2s ease' }}>
+               {workerState.progress}%
              </div>
            </div>
         )}

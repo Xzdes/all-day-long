@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const crypto = require('crypto');
-const { fork } = require('child_process'); // ★★★ ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ИНСТРУМЕНТ ★★★
+const { fork } = require('child_process');
 
 // Хранилище для активных воркеров
 const activeWorkers = new Map();
@@ -29,37 +29,39 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
 
         const workerId = crypto.randomUUID();
         
-        // ★★★ "БРОНЕБОЙНОЕ" РЕШЕНИЕ ★★★
-        // Запускаем воркер как НАСТОЯЩИЙ дочерний процесс Node.js.
-        // `fork` автоматически создает IPC-канал и обеспечивает наличие `process.send`.
-        // Мы передаем путь к корневым node_modules через `cwd`, чтобы `require` работал "из коробки".
         const worker = fork(fullScriptPath, [], {
-          // Указываем рабочую директорию, чтобы `require` работал без костылей.
           cwd: APP_ROOT,
-          // Важно для отладки
           silent: true 
         });
 
         worker.stdout.on('data', (data) => console.log(`[Worker ${workerId} STDOUT]:`, data.toString().trim()));
         worker.stderr.on('data', (data) => console.error(`[Worker ${workerId} STDERR]:`, data.toString().trim()));
 
-        // Этот код теперь будет работать, потому что `fork` это гарантирует.
         worker.on('message', (data) => {
           if (win && !win.isDestroyed()) {
             win.webContents.send('longday:worker-message', { workerId, data });
           }
         });
 
+        // ★★★ НАШЕ ИСПРАВЛЕНИЕ ★★★
         worker.on('exit', (code) => {
           console.log(`Worker ${workerId} has exited with code ${code}.`);
           activeWorkers.delete(workerId);
           if (win && !win.isDestroyed()) {
+            // Отправляем ошибку, только если код завершения - это число, и оно не равно 0.
+            // `code === null` (принудительная остановка) теперь не считается ошибкой.
+            if (typeof code === 'number' && code !== 0) {
+              win.webContents.send('longday:worker-message', { workerId, data: { type: 'error', message: `Воркер неожиданно завершился с кодом ${code}` } });
+            }
             win.webContents.send('longday:worker-exit', { workerId, code });
           }
         });
         
         worker.on('error', (err) => {
            console.error(`[Worker ${workerId} ERROR]:`, err);
+           if (win && !win.isDestroyed()) {
+             win.webContents.send('longday:worker-message', { workerId, data: { type: 'error', message: `Произошла критическая ошибка в воркере: ${err.message}` }});
+           }
         });
 
         activeWorkers.set(workerId, worker);
@@ -70,7 +72,7 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
         const [workerId, message] = args;
         const worker = activeWorkers.get(workerId);
         if (worker) {
-          worker.send(message); // Стандартный метод для fork
+          worker.send(message);
           return { success: true };
         }
         throw new Error(`Worker with ID ${workerId} not found.`);
@@ -80,7 +82,7 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
         const [workerId] = args;
         const worker = activeWorkers.get(workerId);
         if (worker) {
-          worker.kill();
+          worker.kill(); // Эта команда приводит к выходу с кодом `null`
           activeWorkers.delete(workerId);
           return { success: true };
         }
