@@ -5,33 +5,43 @@ const http = require('http');
 const crypto = require('crypto');
 const { fork } = require('child_process');
 
-// Хранилище для активных воркеров
 const activeWorkers = new Map();
 
-// Универсальный обработчик API
+const WORKERS_TEMP_DIR = path.join(app.getPath('userData'), 'temp_workers');
+if (!fs.existsSync(WORKERS_TEMP_DIR)) {
+  fs.mkdirSync(WORKERS_TEMP_DIR, { recursive: true });
+}
+
 ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
   const func = apiRegistry.get(apiKey);
   const win = BrowserWindow.fromWebContents(event.sender);
-  const APP_ROOT = app.getAppPath(); // Это S:\all-day-long\packages\app
+  const APP_ROOT = app.getAppPath();
 
-  // --- Блок для управления воркерами ядра ---
   if (apiKey.startsWith('core.')) {
     const method = apiKey.split('.')[1];
     
     switch (method) {
       case 'createWorker': {
-        const [scriptPath] = args;
-        const fullScriptPath = path.join(APP_ROOT, scriptPath);
+        const [originalScriptPath] = args; // e.g., 'server/workers/heavy-task.js'
+
+        // ★★★ ФИНАЛЬНОЕ ИЗМЕНЕНИЕ: ПУТЬ К СОБРАННОМУ ФАЙЛУ ★★★
+        // Преобразуем путь к воркеру в путь к его собранной, самодостаточной версии.
+        const bundledScriptPath = originalScriptPath.replace('server/workers', 'server/workers-dist');
+        const fullScriptPath = path.join(APP_ROOT, bundledScriptPath);
 
         if (!fs.existsSync(fullScriptPath)) {
-          throw new Error(`Worker script not found: ${fullScriptPath}`);
+          throw new Error(`Bundled worker script not found. Did you run "npm run build"? Path: ${fullScriptPath}`);
         }
 
         const workerId = crypto.randomUUID();
         
-        const worker = fork(fullScriptPath, [], {
-          cwd: APP_ROOT,
-          silent: true 
+        const scriptContent = fs.readFileSync(fullScriptPath, 'utf8');
+        const tempFilePath = path.join(WORKERS_TEMP_DIR, `worker-${workerId}.js`);
+        fs.writeFileSync(tempFilePath, scriptContent);
+        
+        // Запускаем временный файл, которому больше не нужны node_modules, потому что все встроено.
+        const worker = fork(tempFilePath, [], {
+          silent: true
         });
 
         worker.stdout.on('data', (data) => console.log(`[Worker ${workerId} STDOUT]:`, data.toString().trim()));
@@ -43,20 +53,24 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
           }
         });
 
-        // ★★★ НАШЕ ИСПРАВЛЕНИЕ ★★★
+        const workerInfo = { process: worker, tempPath: tempFilePath };
+        
         worker.on('exit', (code) => {
-          console.log(`Worker ${workerId} has exited with code ${code}.`);
+          console.log(`Worker ${workerId} has exited with code ${code}. Cleaning up...`);
           activeWorkers.delete(workerId);
+          if (fs.existsSync(workerInfo.tempPath)) {
+            fs.unlinkSync(workerInfo.tempPath);
+            console.log(`Cleaned up temporary worker file: ${workerInfo.tempPath}`);
+          }
+
           if (win && !win.isDestroyed()) {
-            // Отправляем ошибку, только если код завершения - это число, и оно не равно 0.
-            // `code === null` (принудительная остановка) теперь не считается ошибкой.
             if (typeof code === 'number' && code !== 0) {
               win.webContents.send('longday:worker-message', { workerId, data: { type: 'error', message: `Воркер неожиданно завершился с кодом ${code}` } });
             }
             win.webContents.send('longday:worker-exit', { workerId, code });
           }
         });
-        
+
         worker.on('error', (err) => {
            console.error(`[Worker ${workerId} ERROR]:`, err);
            if (win && !win.isDestroyed()) {
@@ -64,15 +78,15 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
            }
         });
 
-        activeWorkers.set(workerId, worker);
+        activeWorkers.set(workerId, workerInfo);
         return { workerId };
       }
       
       case 'postMessageToWorker': {
         const [workerId, message] = args;
-        const worker = activeWorkers.get(workerId);
-        if (worker) {
-          worker.send(message);
+        const workerInfo = activeWorkers.get(workerId);
+        if (workerInfo) {
+          workerInfo.process.send(message);
           return { success: true };
         }
         throw new Error(`Worker with ID ${workerId} not found.`);
@@ -80,10 +94,9 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
 
       case 'terminateWorker': {
         const [workerId] = args;
-        const worker = activeWorkers.get(workerId);
-        if (worker) {
-          worker.kill(); // Эта команда приводит к выходу с кодом `null`
-          activeWorkers.delete(workerId);
+        const workerInfo = activeWorkers.get(workerId);
+        if (workerInfo) {
+          workerInfo.process.kill();
           return { success: true };
         }
         throw new Error(`Worker with ID ${workerId} not found.`);
@@ -94,7 +107,6 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
     }
   }
 
-  // Перехват специальных команд ядра для управления окном
   if (apiKey.startsWith('window.')) {
     const method = apiKey.split('.')[1];
     switch (method) {
@@ -114,7 +126,6 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
     }
   }
 
-  // Обычная обработка API приложения
   if (!func) {
     throw new Error(`API function "${apiKey}" is not registered.`);
   }
@@ -126,17 +137,12 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
   }
 });
 
-// Глобальные переменные, которые будут инициализированы, когда приложение будет готово.
 let config;
 const apiRegistry = new Map();
 
-/**
- * Главная асинхронная функция инициализации.
- */
 async function initialize() {
   const APP_ROOT = app.getAppPath();
 
-  // --- ШАГ 1: ЗАГРУЗКА КОНФИГУРАЦИИ ---
   config = {
     app: { appId: 'com.electron.default', productName: 'Default App' },
     window: { width: 900, height: 680, title: 'Default Title' },
@@ -161,7 +167,6 @@ async function initialize() {
     console.error('[Core] Error loading longday.config.js:', e);
   }
 
-  // --- ШАГ 2: РЕГИСТРАЦИЯ API ---
   try {
     if (fs.existsSync(config.apiPath)) {
         const apiFiles = fs.readdirSync(config.apiPath).filter(f => f.endsWith('.js'));
@@ -182,16 +187,10 @@ async function initialize() {
     console.error('[Core] Failed to register APIs:', e);
   }
 
-  // --- ШАГ 3: ЗАПУСК ЛОКАЛЬНОГО СЕРВЕРА ---
   const serverUrl = await startLocalServer();
-
-  // --- ШАГ 4: СОЗДАНИЕ ОКНА ---
   await createWindow(serverUrl);
 }
 
-/**
- * Запускает локальный HTTP-сервер для отдачи React-приложения.
- */
 function startLocalServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
@@ -216,9 +215,6 @@ function startLocalServer() {
   });
 }
 
-/**
- * Создает и настраивает главное окно приложения.
- */
 function createWindow(serverUrl) {
   const win = new BrowserWindow({
     ...config.window,
@@ -236,10 +232,8 @@ function createWindow(serverUrl) {
   }
 }
 
-// Запускаем всю нашу инициализацию только тогда, когда приложение готово.
 app.whenReady().then(initialize);
 
-// Стандартная обработка жизненного цикла приложения.
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
@@ -250,4 +244,11 @@ app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         initialize();
     }
+});
+
+app.on('will-quit', () => {
+  if (fs.existsSync(WORKERS_TEMP_DIR)) {
+    fs.rmSync(WORKERS_TEMP_DIR, { recursive: true, force: true });
+    console.log('Cleaned up temp worker directory on exit.');
+  }
 });

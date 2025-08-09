@@ -6,8 +6,11 @@
   "main": "../core/main.js",
   "author": "Xzdes",
   "scripts": {
-    "build": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx",
-    "watch": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx --watch",
+    "build:ui": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx",
+    "build:workers": "node esbuild.workers.js",
+    "build": "npm run build:ui && npm run build:workers",
+    "watch:ui": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx --watch",
+    "watch": "npm-watch",
     "start": "electron .",
     "dev": "npm run build && npm run start",
     "package": "npm run build && electron-builder"
@@ -20,37 +23,16 @@
     "react-router-dom": "7.8.0"
   },
   "devDependencies": {
-    "esbuild": "0.25.8"
+    "esbuild": "0.25.8",
+    "npm-watch": "^0.13.0"
   },
-  "build": {
-    "appId": "com.mycompany.alldaylongapp",
-    "productName": "Мое первое All-Day-Long приложение",
-    "extraMetadata": {
-      "main": "core/main.js"
-    },
-    "directories": {
-      "buildResources": "assets",
-      "output": "../../dist"
-    },
-    "files": [
-      "**/*",
-      "!node_modules/*",
-      {
-        "from": "../core",
-        "to": "core"
-      }
-    ],
-    "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
-    },
-    "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns"
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+  "watch": {
+    "build:workers": {
+      "patterns": [
+        "server/workers"
+      ],
+      "extensions": "js",
+      "quiet": false
     }
   }
 }
