@@ -12,7 +12,16 @@ async function callApi(apiKey, ...args) {
   }
 }
 
-// ★★★ НОВЫЙ ЭКСПОРТ ★★★
+// API для управления ядром и воркерами.
+export const core = {
+  createWorker: (scriptPath) => callApi('core.createWorker', scriptPath),
+  postMessageToWorker: (workerId, message) => callApi('core.postMessageToWorker', workerId, message),
+  terminateWorker: (workerId) => callApi('core.terminateWorker', workerId),
+  // Добавляем доступ к подписчикам
+  onWorkerMessage: window.longday.onWorkerMessage,
+  onWorkerExit: window.longday.onWorkerExit,
+};
+
 // API для получения общей информации о приложении.
 export const app = {
   getPublicConfig: () => callApi('app.getPublicConfig'),

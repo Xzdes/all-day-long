@@ -2,17 +2,95 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
+const { fork } = require('child_process'); // ★★★ ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ИНСТРУМЕНТ ★★★
 
-// Мы не определяем глобальные переменные здесь.
-// Вся инициализация будет инкапсулирована в функции `initialize`.
+// Хранилище для активных воркеров
+const activeWorkers = new Map();
 
-// Универсальный обработчик API остается в глобальной области видимости,
-// так как `ipcMain` является синглтоном.
+// Универсальный обработчик API
 ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
-  // Мы получаем доступ к `apiRegistry` через замыкание, после его инициализации.
-  // Это безопасно, так как `handle` вызывается только после того, как приложение уже работает.
   const func = apiRegistry.get(apiKey);
   const win = BrowserWindow.fromWebContents(event.sender);
+  const APP_ROOT = app.getAppPath(); // Это S:\all-day-long\packages\app
+
+  // --- Блок для управления воркерами ядра ---
+  if (apiKey.startsWith('core.')) {
+    const method = apiKey.split('.')[1];
+    
+    switch (method) {
+      case 'createWorker': {
+        const [scriptPath] = args;
+        const fullScriptPath = path.join(APP_ROOT, scriptPath);
+
+        if (!fs.existsSync(fullScriptPath)) {
+          throw new Error(`Worker script not found: ${fullScriptPath}`);
+        }
+
+        const workerId = crypto.randomUUID();
+        
+        // ★★★ "БРОНЕБОЙНОЕ" РЕШЕНИЕ ★★★
+        // Запускаем воркер как НАСТОЯЩИЙ дочерний процесс Node.js.
+        // `fork` автоматически создает IPC-канал и обеспечивает наличие `process.send`.
+        // Мы передаем путь к корневым node_modules через `cwd`, чтобы `require` работал "из коробки".
+        const worker = fork(fullScriptPath, [], {
+          // Указываем рабочую директорию, чтобы `require` работал без костылей.
+          cwd: APP_ROOT,
+          // Важно для отладки
+          silent: true 
+        });
+
+        worker.stdout.on('data', (data) => console.log(`[Worker ${workerId} STDOUT]:`, data.toString().trim()));
+        worker.stderr.on('data', (data) => console.error(`[Worker ${workerId} STDERR]:`, data.toString().trim()));
+
+        // Этот код теперь будет работать, потому что `fork` это гарантирует.
+        worker.on('message', (data) => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('longday:worker-message', { workerId, data });
+          }
+        });
+
+        worker.on('exit', (code) => {
+          console.log(`Worker ${workerId} has exited with code ${code}.`);
+          activeWorkers.delete(workerId);
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('longday:worker-exit', { workerId, code });
+          }
+        });
+        
+        worker.on('error', (err) => {
+           console.error(`[Worker ${workerId} ERROR]:`, err);
+        });
+
+        activeWorkers.set(workerId, worker);
+        return { workerId };
+      }
+      
+      case 'postMessageToWorker': {
+        const [workerId, message] = args;
+        const worker = activeWorkers.get(workerId);
+        if (worker) {
+          worker.send(message); // Стандартный метод для fork
+          return { success: true };
+        }
+        throw new Error(`Worker with ID ${workerId} not found.`);
+      }
+
+      case 'terminateWorker': {
+        const [workerId] = args;
+        const worker = activeWorkers.get(workerId);
+        if (worker) {
+          worker.kill();
+          activeWorkers.delete(workerId);
+          return { success: true };
+        }
+        throw new Error(`Worker with ID ${workerId} not found.`);
+      }
+
+      default:
+        throw new Error(`Unknown core API method: ${method}`);
+    }
+  }
 
   // Перехват специальных команд ядра для управления окном
   if (apiKey.startsWith('window.')) {
@@ -47,19 +125,13 @@ ipcMain.handle('longday:call', async (event, apiKey, ...args) => {
 });
 
 // Глобальные переменные, которые будут инициализированы, когда приложение будет готово.
-// Они доступны только внутри этого модуля.
 let config;
 const apiRegistry = new Map();
 
 /**
  * Главная асинхронная функция инициализации.
- * Запускается один раз, когда Electron готов к работе.
  */
 async function initialize() {
-  // ★★★ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ★★★
-  // app.getAppPath() - это ЕДИНСТВЕННЫЙ надежный способ получить путь к корню приложения.
-  // В разработке он указывает на packages/app.
-  // В собранном виде он указывает на resources/app.asar.
   const APP_ROOT = app.getAppPath();
 
   // --- ШАГ 1: ЗАГРУЗКА КОНФИГУРАЦИИ ---
@@ -117,12 +189,10 @@ async function initialize() {
 
 /**
  * Запускает локальный HTTP-сервер для отдачи React-приложения.
- * @returns {Promise<string>} URL запущенного сервера.
  */
 function startLocalServer() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      // Путь к файлам теперь строится от правильного `config.publicPath`, который основан на `APP_ROOT`.
       const filePath = path.join(config.publicPath, req.url === '/' ? 'index.html' : req.url);
       fs.readFile(filePath, (err, data) => {
         if (err) {
@@ -146,14 +216,12 @@ function startLocalServer() {
 
 /**
  * Создает и настраивает главное окно приложения.
- * @param {string} serverUrl - URL для загрузки в окно.
  */
 function createWindow(serverUrl) {
   const win = new BrowserWindow({
     ...config.window,
     icon: config.window.icon,
     webPreferences: {
-      // `preload` всегда лежит рядом с `main.js` в папке ядра.
       preload: path.join(__dirname, 'preload.js'),
       csp: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     }
@@ -177,7 +245,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-    // На macOS принято заново создавать окно, если оно было закрыто, а приложение осталось в доке.
     if (BrowserWindow.getAllWindows().length === 0) {
         initialize();
     }

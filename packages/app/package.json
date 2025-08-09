@@ -4,7 +4,7 @@
   "private": true,
   "description": "The application part of the all-day-long-project project.",
   "main": "../core/main.js",
-  "author": "Your Name",
+  "author": "Xzdes",
   "scripts": {
     "build": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx",
     "watch": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx --watch",
@@ -14,12 +14,13 @@
   },
   "dependencies": {
     "all-day-long-core": "file:../core",
+    "dayjs": "1.11.12",
     "react": "19.1.1",
-    "react-dom": "^19.1.1",
-    "react-router-dom": "^7.8.0"
+    "react-dom": "19.1.1",
+    "react-router-dom": "7.8.0"
   },
   "devDependencies": {
-    "esbuild": "^0.25.8"
+    "esbuild": "0.25.8"
   },
   "build": {
     "appId": "com.mycompany.alldaylongapp",
