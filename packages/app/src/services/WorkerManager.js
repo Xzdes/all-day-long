@@ -53,6 +53,16 @@ class WorkerManager {
   async startTask(scriptPath, startMessage) {
     console.log(`[WorkerManager] Attempting to start task: ${scriptPath}`);
     try {
+      // ★★★ НАШЕ ИСПРАВЛЕНИЕ (часть 1) ★★★
+      // Перед запуском нового, удалим старый завершенный воркер с тем же путем.
+      // Это предотвращает "засорение" карты состояний.
+      const oldWorker = Array.from(this.workers.values()).find(
+        w => w.scriptPath === scriptPath && !w.isRunning
+      );
+      if (oldWorker) {
+        this.workers.delete(oldWorker.id);
+      }
+      
       const { workerId } = await core.createWorker(scriptPath);
       
       const initialState = {
@@ -71,8 +81,6 @@ class WorkerManager {
       return workerId;
     } catch (error) {
       console.error('[WorkerManager] Failed to start worker:', error);
-      // We can't update a specific worker state, so this is a global error.
-      // A more robust system might have a global error state.
       throw error;
     }
   }
@@ -92,7 +100,6 @@ class WorkerManager {
       // The onWorkerExit handler will clean up the state.
     } catch (error) {
       console.error(`[WorkerManager] Failed to terminate worker ${workerId}:`, error);
-      // Manually update state if the call fails.
       const workerState = this.workers.get(workerId);
       if (workerState) {
         workerState.status = `Error during termination: ${error.message}`;
@@ -129,7 +136,6 @@ class WorkerManager {
     switch (data.type) {
       case 'ready':
         state.status = 'Worker ready. Sending initial command...';
-        // Send the stored start message
         if (state.startMessage) {
             core.postMessageToWorker(workerId, state.startMessage);
         }
@@ -143,7 +149,7 @@ class WorkerManager {
         break;
       case 'error':
         state.status = `Ошибка: ${data.message}`;
-        state.isRunning = false; // The worker has crashed
+        state.isRunning = false; 
         break;
       default:
         console.warn(`[WorkerManager] Unknown message type from worker ${workerId}: ${data.type}`);
@@ -162,21 +168,28 @@ class WorkerManager {
     const state = this.workers.get(workerId);
     state.isRunning = false;
     state.exitCode = code;
-    // Don't overwrite a specific error status.
+
+    // ★★★ НАШЕ ИСПРАВЛЕНИЕ (часть 2) ★★★
+    // Устанавливаем понятный для пользователя статус, если ранее не была установлена ошибка.
     if (!state.status.startsWith('Ошибка:')) {
-       state.status = `Worker has finished with code ${code}.`;
+       if (code === 0) {
+           // Если задача сама дошла до конца и отправила 'result'
+           // не будем перезаписывать финальный результат.
+           if (!state.status.includes('Calculation result')) {
+               state.status = 'Задача успешно завершена.';
+           }
+       } else {
+           state.status = 'Задача была остановлена.';
+       }
     }
     
     this.notifyListeners();
-    // Maybe we should remove the worker from the map after some time?
-    // For now, we'll keep it to show the final status.
   }
   
   /**
    * @private
    */
   notifyListeners() {
-    // Notify all subscribed components about the state change.
     for (const listener of this.listeners) {
       listener(new Map(this.workers));
     }

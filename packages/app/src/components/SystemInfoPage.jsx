@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { system } from '../api';
-// ★★★ НАША РЕАЛИЗАЦИЯ (ЦЕНТРАЛИЗОВАННЫЙ СЕРВИС) ★★★
-// Импортируем наш новый менеджер вместо прямого вызова `core`
 import { workerManager } from '../services/WorkerManager';
 
-// Константа для пути к скрипту для удобства
 const HEAVY_TASK_SCRIPT = 'server/workers/heavy-task.js';
 
 export default function SystemInfoPage() {
-  // --- Системная информация и приветствие (без изменений) ---
   const [systemInfo, setSystemInfo] = useState(null);
   const [name, setName] = useState('Мир');
   const [greeting, setGreeting] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
+  const [workerState, setWorkerState] = useState({
+    id: null,
+    status: 'Ready to start.',
+    progress: 0,
+    isRunning: false,
+  });
+
   useEffect(() => {
     async function fetchInfo() {
       try {
@@ -27,6 +30,65 @@ export default function SystemInfoPage() {
     fetchInfo();
   }, []);
 
+  useEffect(() => {
+    // ★★★ НАШЕ ГЛАВНОЕ ИСПРАВЛЕНИЕ ★★★
+    const handleStateUpdate = (allWorkers) => {
+      // Ищем АКТИВНЫЙ воркер, который соответствует нашему скрипту.
+      const activeWorker = Array.from(allWorkers.values()).find(
+        (w) => w.scriptPath === HEAVY_TASK_SCRIPT && w.isRunning
+      );
+
+      if (activeWorker) {
+        // Если нашли активный воркер, обновляем состояние UI по нему.
+        setWorkerState({
+          id: activeWorker.id,
+          status: activeWorker.status,
+          progress: activeWorker.progress,
+          isRunning: activeWorker.isRunning,
+        });
+      } else {
+        // Если АКТИВНОГО воркера нет, ищем последний завершившийся, чтобы показать его статус.
+        const lastFinishedWorker = Array.from(allWorkers.values())
+          .filter(w => w.scriptPath === HEAVY_TASK_SCRIPT && !w.isRunning)
+          .sort((a, b) => b.exitCode - a.exitCode) // Просто для какой-то сортировки
+          .pop();
+
+        if (lastFinishedWorker) {
+            setWorkerState({
+              id: lastFinishedWorker.id,
+              status: lastFinishedWorker.status,
+              progress: lastFinishedWorker.progress,
+              isRunning: false, // Он точно не запущен
+            });
+        } else {
+             // Если нет ни активного, ни завершенного - сбрасываем в исходное состояние.
+            setWorkerState({
+                id: null,
+                status: 'Готов к запуску новой задачи.',
+                progress: 0,
+                isRunning: false,
+            });
+        }
+      }
+    };
+
+    const unsubscribe = workerManager.subscribe(handleStateUpdate);
+    return () => unsubscribe();
+  }, []);
+
+  const handleStartWorker = () => {
+    if (workerState.isRunning) return;
+    workerManager.startTask(
+      HEAVY_TASK_SCRIPT,
+      { command: 'start', iterations: 500_000_000 }
+    );
+  };
+
+  const handleStopWorker = () => {
+    if (!workerState.id || !workerState.isRunning) return;
+    workerManager.stopTask(workerState.id);
+  };
+  
   const handleGreetClick = async () => {
     if (!name) {
       setError("Имя не может быть пустым.");
@@ -43,68 +105,6 @@ export default function SystemInfoPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-  
-  // --- Логика воркера, теперь управляемая через WorkerManager ---
-
-  // Локальное состояние компонента, которое будет синхронизироваться с менеджером
-  const [workerState, setWorkerState] = useState({
-    id: null,
-    status: 'Not running',
-    progress: 0,
-    isRunning: false,
-  });
-
-  // Подписываемся на изменения в WorkerManager при монтировании компонента
-  useEffect(() => {
-    const handleStateUpdate = (allWorkers) => {
-      // В этом компоненте нас интересует только наш конкретный воркер
-      let relevantState = null;
-      for (const worker of allWorkers.values()) {
-        if (worker.scriptPath === HEAVY_TASK_SCRIPT) {
-          relevantState = worker;
-          break; // Нашли, выходим
-        }
-      }
-
-      if (relevantState) {
-        setWorkerState({
-          id: relevantState.id,
-          status: relevantState.status,
-          progress: relevantState.progress,
-          isRunning: relevantState.isRunning,
-        });
-      } else {
-        // Если воркера нет, сбрасываем состояние в начальное
-        setWorkerState({
-          id: null,
-          status: 'Ready to start a new one.',
-          progress: 0,
-          isRunning: false,
-        });
-      }
-    };
-
-    // workerManager.subscribe возвращает функцию отписки
-    const unsubscribe = workerManager.subscribe(handleStateUpdate);
-
-    // Отписываемся при размонтировании компонента
-    return () => unsubscribe();
-  }, []); // Пустой массив зависимостей, чтобы подписка была одна на весь жизненный цикл
-
-  const handleStartWorker = () => {
-    if (workerState.isRunning) return;
-    // Компонент просто просит менеджер запустить задачу
-    workerManager.startTask(
-      HEAVY_TASK_SCRIPT,
-      { command: 'start', iterations: 500_000_000 }
-    );
-  };
-
-  const handleStopWorker = () => {
-    if (!workerState.id) return;
-    // Компонент просто просит менеджер остановить задачу
-    workerManager.stopTask(workerState.id);
   };
 
   return (
@@ -141,10 +141,10 @@ export default function SystemInfoPage() {
       </div>
       <div>
         <p><strong>Статус:</strong> {workerState.status}</p>
-        {workerState.isRunning && (
+        {(workerState.isRunning || workerState.progress > 0) && (
            <div style={{ width: '100%', backgroundColor: '#e0e0e0', borderRadius: '4px' }}>
              <div style={{ width: `${workerState.progress}%`, backgroundColor: '#3B82F6', color: 'white', textAlign: 'center', padding: '4px', borderRadius: '4px', transition: 'width 0.2s ease' }}>
-               {workerState.progress}%
+               {workerState.progress > 0 ? `${workerState.progress}%` : ''}
              </div>
            </div>
         )}
