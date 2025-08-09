@@ -13,7 +13,7 @@
     "watch": "npm-watch",
     "start": "electron .",
     "dev": "npm run build && npm run start",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder --config electron-builder.config.js"
   },
   "dependencies": {
     "all-day-long-core": "file:../core",

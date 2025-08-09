@@ -6,18 +6,25 @@ const appConfig = require('./longday.config.js');
  * @see https://www.electron.build/configuration/configuration
  */
 const config = {
+  // --- Используем данные из longday.config.js ---
   appId: appConfig.app.appId,
   productName: appConfig.app.productName,
-  main: 'core/main.js',
+  
+  // ★★★ ГЛАВНОЕ И ОКОНЧАТЕЛЬНОЕ ИСПРАВЛЕНИЕ ★★★
+  // Ключ 'main' должен находиться внутри объекта 'extraMetadata'.
+  // Это специальный блок, который electron-builder использует для того,
+  // чтобы переопределить поля в package.json, который попадает в сборку.
+  extraMetadata: {
+    main: 'core/main.js',
+  },
 
   directories: {
     buildResources: 'assets',
+    // Куда складывать готовые дистрибутивы
     output: '../../dist',
   },
-
-  // ★★★ ФИНАЛЬНОЕ УКРЕПЛЕНИЕ ★★★
-  // Вместо того чтобы включать все подряд ('**/*'), мы явно перечисляем
-  // только то, что необходимо для работы приложения. Это чище и надежнее.
+  
+  // Явно перечисляем только то, что необходимо для работы приложения.
   files: [
     "public/**/*", // Собранный UI
     "server/api/**/*", // Наши серверные API

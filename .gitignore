@@ -37,6 +37,8 @@ dist/
 build/
 packages/app/public
 
+packages/app/server/workers-dist
+
 # Optional npm cache directory
 .npm/
 
