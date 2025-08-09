@@ -1,14 +1,14 @@
-# all-day-long
+# all-day-long: Бронебойное ядро для Electron и React
 
-**all-day-long** — это бронебойное, минималистичное ядро для создания нативных десктопных приложений с помощью Electron и React.
+**all-day-long** — это минималистичный, но чрезвычайно надежный фундамент для создания нативных десктопных приложений с помощью Electron и React. Его главная цель — обеспечить максимальную производительность, предсказуемость и отказоустойчивость, особенно при работе с долгими, ресурсоемкими задачами.
 
 ## Философия
 
-Этот фреймворк был создан как ответ на излишне сложные, "магические" системы. Главный принцип — **прямая связь и максимальная прозрачность**. Мы не прячем механизмы за слоями абстракций, а даем вам прямой и понятный контроль над вашим приложением.
+Этот фреймворк был создан как ответ на излишне сложные, "магические" системы. Главный принцип — **прямая связь и максимальная прозрачность**.
 
-*   **Никаких Манифестов:** Вы не описываете логику в JSON-файлах, вы вызываете ее. Чтобы выполнить серверную функцию, вы просто вызываете ее из React по имени. Все просто и предсказуемо.
-*   **Прозрачный Мост Данных:** Весь поток данных между вашим интерфейсом и Node.js-сервером проходит через один-единственный, асинхронный вызов функции. Вы всегда точно знаете, как данные попадают из точки А в точку Б.
-*   **Строгое Разделение:** Ядро (`core`) — это "тупой", но надежный фундамент. Оно не знает ничего о вашем приложении. Вся ваша логика, UI и зависимости находятся в папке приложения (`app`). Это гарантирует, что ядро можно обновлять, не боясь сломать бизнес-логику.
+*   **Никакой Магии:** Вы не описываете логику в JSON-файлах, вы вызываете ее. Чтобы выполнить серверную функцию, вы просто вызываете ее из React по имени. Все просто и предсказуемо.
+*   **Прозрачный Мост Данных:** Весь поток данных между вашим UI и Node.js-сервером проходит через один-единственный, асинхронный вызов функции. Вы всегда точно знаете, как данные попадают из точки А в точку Б.
+*   **Строгое Разделение:** Ядро (`core`) — это надежный, но "глупый" исполнитель. Оно не знает ничего о вашем приложении. Вся ваша логика, UI и зависимости находятся в папке приложения (`app`).
 *   **Полный Контроль у Вас:** Вы управляете поведением, внешним видом и API приложения через простые JS-файлы и один конфигурационный файл. Ядро просто выполняет ваши инструкции.
 
 ## Быстрый старт
@@ -20,7 +20,7 @@
 ```bash
 npx all-day-long-core my-new-app
 ```
-*(Примечание: `all-day-long-core` — это имя пакета в npm после его публикации)*
+*(Предполагается, что `all-day-long-core` опубликован в npm)*
 
 Эта команда создаст новую папку `my-new-app` со всей необходимой структурой. Затем перейдите в нее и запустите приложение:
 
@@ -30,14 +30,14 @@ npm install
 npm run dev
 ```
 
-Откроется окно вашего нового десктопного приложения.
+Откроется окно вашего нового десктопного приложения. Для удобства разработки вы можете открыть второй терминал и запустить в нем `npm run watch` — эта команда будет автоматически пересобирать ваши фоновые воркеры при сохранении изменений.
 
 ## Как это работает: Ключевые механизмы
 
 Ядро предоставляет три простых, но мощных механизма.
 
 1.  **Серверный API (`/packages/app/server/api`):** Вы создаете обычные `.js` файлы с `async` функциями. Ядро автоматически находит, регистрирует их под именем `имя_файла.имя_функции` и делает доступными для вызова.
-2.  **Фоновые Воркеры (`/packages/app/server/workers`):** Для долгих, ресурсоемких задач вы создаете `.js` файлы в этой папке. Ядро запускает их в отдельных, полноценных Node.js-процессах, обеспечивая 100% отзывчивость интерфейса.
+2.  **Фоновые Воркеры (`/packages/app/server/workers`):** Для долгих, ресурсоемких задач вы создаете `.js` файлы в этой папке. Перед запуском ядро **собирает каждого воркера в единый, самодостаточный файл**, в который уже встроены все его npm-зависимости. Затем этот файл запускается в отдельном Node.js-процессе, гарантируя 100% отзывчивость интерфейса.
 3.  **Единый Мост (`window.longday.call()`):** В вашем React-коде вы вызываете любую серверную функцию или команду ядра через эту единственную точку входа, например `await window.longday.call('users.getAll')`, и получаете результат.
 
 ## Структура Проекта
@@ -47,17 +47,21 @@ npm run dev
 ```
 /packages/app/
 ├── assets/                 # Иконки для сборки (.png, .ico, .icns)
-├── node_modules/           # Зависимости вашего приложения (React, dayjs и т.д.)
-├── public/                 # Сюда попадают скомпилированные файлы
+├── public/                 # Сюда попадает скомпилированный UI (bundle.js)
 ├── server/
 │   ├── api/                # ★ Ваши серверные API-функции (быстрые операции)
 │   │   └── system.js
-│   └── workers/            # ★ Ваши фоновые процессы (долгие операции)
+│   ├── workers/            # ★ ИСХОДНЫЙ код ваших фоновых процессов
+│   │   └── heavy-task.js
+│   └── workers-dist/       # Собранные, самодостаточные воркеры (не трогать руками)
 │       └── heavy-task.js
 ├── src/
 │   ├── api.js              # Удобные обертки для вызова API
 │   ├── components/         # ★ Ваши React-компоненты
+│   ├── services/           # ★ Сервисы для управления сложной логикой (WorkerManager)
 │   └── ...
+├── esbuild.workers.js      # ★ Скрипт сборки воркеров
+├── electron-builder.config.js # ★ Конфигурация сборки приложения
 ├── longday.config.js       # ★ Ваш главный файл конфигурации приложения
 └── package.json            # ★ Зависимости и скрипты вашего приложения
 ```
@@ -105,12 +109,10 @@ module.exports = {
 
 **Шаг 2: Вызовите API из React-компонента**
 
-В любом компоненте вы можете вызвать эти функции:
-
 ```jsx
 import React, { useEffect, useState } from 'react';
-// Рекомендуется использовать обертки из src/api.js для чистоты кода
-import { usersApi } from '../api'; // Предполагается, что вы создали обертку
+// Рекомендуется создать обертку в src/api.js для чистоты кода
+// import { usersApi } from '../api'; 
 
 function UserList() {
   const [users, setUsers] = useState([]);
@@ -119,6 +121,7 @@ function UserList() {
   useEffect(() => {
     async function fetchUsers() {
       try {
+        // Прямой вызов через мост
         const userList = await window.longday.call('users.getAll');
         setUsers(userList);
       } catch (e) {
@@ -128,25 +131,20 @@ function UserList() {
     fetchUsers();
   }, []);
 
-  if (error) {
-    return <p style={{ color: 'red' }}>Ошибка: {error}</p>;
-  }
-
+  if (error) return <p style={{ color: 'red' }}>Ошибка: {error}</p>;
   return (
-    <ul>
-      {users.map(user => <li key={user.id}>{user.name} ({user.email})</li>)}
-    </ul>
+    <ul>{users.map(user => <li key={user.id}>{user.name}</li>)}</ul>
   );
 }
 ```
 
 ### 2. Фоновые задачи (Долгие, "тяжелые" операции)
 
-Это **бронебойное решение** для задач, которые могут заморозить интерфейс: обработка больших файлов, сложные вычисления, архивирование. Ядро запускает ваш скрипт в полноценном дочернем процессе Node.js, гарантируя, что ваше React-приложение останется на 100% отзывчивым.
+Это **бронебойное решение** для задач, которые могут заморозить интерфейс: обработка больших файлов, сложные вычисления, архивирование.
 
 **Шаг 1: Создайте файл воркера**
 
-Воркер — это обычный Node.js скрипт. Создадим `packages/app/server/workers/report-generator.js`.
+Воркер — это обычный Node.js скрипт. Создадим `packages/app/server/workers/report-generator.js`. Вы можете использовать в нем любые npm-пакеты.
 
 ```javascript
 // packages/app/server/workers/report-generator.js
@@ -169,10 +167,11 @@ function generateReport(customerName) {
     reportContent += `Обработан шаг ${i + 1}...\n`;
   }
   
-  const reportPath = path.join(__dirname, '..', '..', 'public', `${customerName}-report.txt`);
-  fs.writeFileSync(reportPath, reportContent);
+  // В реальном приложении путь нужно получать более надежно
+  const reportPath = `report-for-${customerName}.txt`;
+  // fs.writeFileSync(reportPath, reportContent);
   
-  return reportPath;
+  return `Отчет для ${customerName} сгенерирован.`;
 }
 
 // --- Управление воркером ---
@@ -182,87 +181,74 @@ process.on('message', (message) => {
   if (message.command === 'start') {
     process.send({ type: 'status', value: `Генерация отчета для ${message.customer}...` });
     
-    const finalPath = generateReport(message.customer);
+    const finalResult = generateReport(message.customer);
     
     // 2. Отправляем финальный результат
-    process.send({ type: 'result', value: `Отчет успешно сохранен в: ${finalPath}` });
+    process.send({ type: 'result', value: finalResult });
   }
 });
 
 // 3. Сообщаем React, что мы готовы принимать команды ("рукопожатие")
 process.send({ type: 'ready' });
 ```
+> **Важно:** После создания или изменения этого файла, он будет автоматически пересобран, если у вас запущен `npm run watch`. Если нет, нужно перезапустить `npm run dev`.
 
-**Шаг 2: Управляйте воркером из React**
+**Шаг 2: Управляйте воркером через `WorkerManager` из React**
 
-В вашем компоненте реализуйте полный цикл жизни: запуск, получение данных, остановка.
+В вашем компоненте используйте централизованный сервис `WorkerManager` для управления жизненным циклом воркера.
 
 ```jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { core } from '../api'; // Используем API ядра
+import React, { useState, useEffect } from 'react';
+// Импортируем наш менеджер
+import { workerManager } from '../services/WorkerManager';
+
+const REPORT_SCRIPT = 'server/workers/report-generator.js';
 
 function ReportManager() {
-  const [workerId, setWorkerId] = useState(null);
-  const [status, setStatus] = useState('Готов к работе.');
-  const [progress, setProgress] = useState(0);
+  const [workerState, setWorkerState] = useState({ isRunning: false, status: 'Готов', progress: 0 });
 
-  // Обработчик сообщений от воркера
-  const handleWorkerMessage = useCallback((id, data) => {
-    if (id !== workerId) return;
-
-    if (data.type === 'ready') {
-      setStatus('Воркер готов. Отправка задачи...');
-      core.postMessageToWorker(id, { command: 'start', customer: 'ACME Corp' });
-      return;
-    }
-    if (data.type === 'progress') {
-      setProgress(data.value);
-    }
-    if (data.type === 'status' || data.type === 'result') {
-      setStatus(data.value);
-    }
-  }, [workerId]);
-
-  // Обработчик завершения работы воркера
-  const handleWorkerExit = useCallback((id, code) => {
-    if (id !== workerId) return;
-    setStatus(`Воркер завершил работу с кодом ${code}.`);
-    setWorkerId(null);
-  }, [workerId]);
-
-  // Подписываемся на события воркера
   useEffect(() => {
-    if (!workerId) return;
-    const cleanupMsg = core.onWorkerMessage(handleWorkerMessage);
-    const cleanupExit = core.onWorkerExit(handleWorkerExit);
-    return () => {
-      cleanupMsg();
-      cleanupExit();
-    };
-  }, [workerId, handleWorkerMessage, handleWorkerExit]);
+    // Подписываемся на все изменения воркеров
+    const unsubscribe = workerManager.subscribe(allWorkers => {
+      // Ищем наш конкретный воркер по пути к скрипту
+      const reportWorker = Array.from(allWorkers.values()).find(w => w.scriptPath === REPORT_SCRIPT);
+      
+      if (reportWorker) {
+        setWorkerState(reportWorker);
+      } else {
+        // Если воркер не найден (еще не запускался или завершился)
+        setWorkerState({ isRunning: false, status: 'Готов к запуску', progress: 0 });
+      }
+    });
 
-  // Функция для запуска
-  const startGenerating = async () => {
-    if (workerId) return;
-    setProgress(0);
-    setStatus('Запускаем воркер...');
-    const { workerId: newId } = await core.createWorker('server/workers/report-generator.js');
-    setWorkerId(newId);
+    // Отписываемся при размонтировании компонента
+    return () => unsubscribe();
+  }, []);
+
+  const handleStart = () => {
+    // Просто просим менеджер запустить задачу
+    workerManager.startTask(REPORT_SCRIPT, { command: 'start', customer: 'ACME Corp' });
+  };
+
+  const handleStop = () => {
+    // Просим остановить задачу по ее ID
+    if (workerState.id) {
+      workerManager.stopTask(workerState.id);
+    }
   };
 
   return (
     <div>
       <h3>Генератор отчетов</h3>
-      <button className="btn" onClick={startGenerating} disabled={!!workerId}>
-        {workerId ? 'Генерация...' : 'Сгенерировать отчет'}
+      <button onClick={handleStart} disabled={workerState.isRunning}>
+        {workerState.isRunning ? 'Генерация...' : 'Сгенерировать отчет'}
       </button>
-      <p><strong>Статус:</strong> {status}</p>
-      {workerId && (
-        <div style={{ width: '100%', backgroundColor: '#e0e0e0', borderRadius: '4px' }}>
-          <div style={{ width: `${progress}%`, /* ... стили для прогресс-бара */ }}>
-            {progress}%
-          </div>
-        </div>
+      <button onClick={handleStop} disabled={!workerState.isRunning}>
+        Остановить
+      </button>
+      <p><strong>Статус:</strong> {workerState.status}</p>
+      {workerState.isRunning && (
+        <progress value={workerState.progress} max="100" style={{width: '100%'}} />
       )}
     </div>
   );
@@ -271,13 +257,16 @@ function ReportManager() {
 
 ## Сборка приложения
 
-Для сборки вашего приложения в установочный файл (`.exe`, `.dmg` и т.д.), выполните команду из **корня проекта**:
+### Конфигурационные файлы
+*   `longday.config.js` — здесь вы задаете основные параметры приложения: ID, имя, размеры окна по умолчанию и т.д.
+*   `electron-builder.config.js` — здесь настраивается сам процесс сборки: какие файлы включать, иконки, форматы пакетов (`.exe`, `.dmg`).
 
-```bash
-npm run package
-```
+### Процесс сборки
 
-Готовые для распространения файлы появятся в папке `/dist` в корне вашего проекта.
+1.  **Сборка для разработки (`npm run build`):** Эта команда собирает и UI, и самодостаточные воркеры. Она выполняется автоматически как часть `npm run dev`.
+2.  **Сборка для распространения (`npm run package`):** Эта команда сначала выполняет `npm run build`, а затем упаковывает все в установочные файлы для вашей операционной системы. Готовые файлы появятся в папке `/dist` в корне вашего проекта.
+
+> **Важно:** Перед запуском `npm run package` убедитесь, что вы остановили все запущенные процессы разработки (`Ctrl + C` в терминале). Если сборка падает с ошибкой "The process cannot access the file", это значит, что фоновый процесс от предыдущего запуска все еще блокирует файлы.
 
 ## Лицензия
 
