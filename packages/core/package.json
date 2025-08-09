@@ -1,6 +1,6 @@
 {
   "name": "all-day-long-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A bulletproof, zero-config core for creating native desktop apps with Electron and React.",
   "main": "main.js",
   "bin": {
@@ -34,6 +34,6 @@
   },
   "homepage": "https://github.com/Xzdes/all-day-long#readme",
   "dependencies": {
-   "electron": "37.2.6"
+    "electron": "37.2.6"
   }
 }
