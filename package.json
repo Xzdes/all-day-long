@@ -8,13 +8,16 @@
     "dev": "npm run dev --workspace=app",
     "start": "npm run start --workspace=app",
     "build": "npm run build --workspace=app",
-    "package": "npm run package --workspace=app"
+    "package": "npm run package --workspace=app",
+    "prepare-core-for-publish": "node scripts/prepare-publish.js",
+    "publish-core": "npm run prepare-core-for-publish && npm publish --workspace=core"
   },
   "workspaces": [
     "packages/*"
   ],
   "devDependencies": {
     "electron": "37.2.6",
-    "electron-builder": "26.0.12"
+    "electron-builder": "26.0.12",
+    "fs-extra": "^11.2.0"
   }
 }

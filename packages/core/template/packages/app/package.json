@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "The application part of the all-day-long-project project.",
-  "main": "../core/main.js",
+  "main": "main.js",
   "author": "Xzdes",
   "scripts": {
     "build:ui": "esbuild src/index.js --bundle --outfile=public/bundle.js --jsx=automatic --loader:.js=jsx",
