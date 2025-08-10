@@ -1,6 +1,6 @@
 {
   "name": "all-day-long-core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A bulletproof, zero-config core for creating native desktop apps with Electron and React.",
   "main": "main.js",
   "bin": {
