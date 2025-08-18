@@ -1,8 +1,8 @@
 {
-  "name": "all-day-long-project-monorepo",
+  "name": "corecrear-project-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "A new project powered by the all-day-long core.",
+  "description": "A new project powered by the corecrear core.",
   "scripts": {
     "install-all": "npm install",
     "dev": "npm run dev --workspace=app",

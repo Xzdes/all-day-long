@@ -2,7 +2,7 @@
   "name": "app",
   "version": "1.0.0",
   "private": true,
-  "description": "The application part of the all-day-long-project project.",
+  "description": "The application part of the corecrear-project project.",
   "main": "../core/main.js",
   "author": "Xzdes",
   "scripts": {
@@ -16,7 +16,7 @@
     "package": "npm run build && electron-builder --config electron-builder.config.js"
   },
   "dependencies": {
-    "all-day-long-core": "file:../core",
+    "corecrear-core": "file:../core",
     "dayjs": "1.11.12",
     "react": "19.1.1",
     "react-dom": "19.1.1",
